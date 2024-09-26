@@ -1,0 +1,66 @@
+pipeline {
+
+    agent {
+        docker {
+            image 'python:3.12'
+        }
+    }
+
+    parameters {
+        string(name: 'URL', defaultValue: 'https://www.booking.com', description: 'URL to process')
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                script {
+                    def repoUrl = 'https://github.com/RomanKovalev/jnks'
+                    git url: repoUrl, branch: 'main'
+                }
+            }
+        }
+        stage('Install dependencies') {
+            steps {
+                script {
+                    sh '''
+                        export PIP_CACHE_DIR=/tmp/pip_cache
+                        pip install --no-cache-dir --prefix=/tmp -r part_1/requirements.txt
+                        export PYTHONPATH=$PYTHONPATH:/tmp/lib/python3.12/site-packages
+                    '''
+                }
+            }
+        }
+        stage('Testing Application') {
+            steps {
+                script {
+                    sh '''
+                        export PYTHONPATH=$PYTHONPATH:/tmp/lib/python3.12/site-packages
+                        export PATH=/tmp/bin:$PATH
+                        pytest --cov=fetch_images part_1/test_fetch_images.py
+                    '''
+                }
+            }
+        }
+        stage('Run Application') {
+            steps {
+                script {
+                    sh '''
+                        export PYTHONPATH=$PYTHONPATH:/tmp/lib/python3.12/site-packages
+                        python part_1/fetch_images.py ${URL}
+                    '''
+                }
+            }
+        }
+        stage('Archive Artifacts') {
+            steps {
+                script {
+                    def buildDir = "${env.WORKSPACE}/build-${env.BUILD_ID}/images"
+                    sh "mkdir -p ${buildDir}"
+                    sh "mv images/* ${buildDir}/"
+                    archiveArtifacts artifacts: "build-${env.BUILD_ID}/images/*", fingerprint: true
+                }
+            }
+        }
+    }
+}
